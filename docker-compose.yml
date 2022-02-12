@@ -1,0 +1,90 @@
+version: "3.4"
+
+x-db-env: &db-env
+  POSTGRES_USER: app
+  POSTGRES_PASSWORD: app
+  POSTGRES_DB: app
+
+x-queue-env: &queue-env
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  INGEST_QUEUE: ${INGEST_QUEUE:-ingest}
+
+services:
+  migrations:
+    build: .
+    command:
+      - scripts/docker/db-migrate.sh
+    volumes:
+      - .:/app
+    environment:
+      <<: *db-env
+    depends_on:
+      - db
+
+  api:
+    build: .
+    entrypoint:
+      - gunicorn
+      - -k
+      - "uvicorn.workers.UvicornWorker"
+      - -c
+      - "gunicorn_conf.py"
+      - app.main:app
+    volumes:
+      - .:/app
+    ports:
+      - 8000:8000
+    environment:
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+      API_RELOAD: ${API_RELOAD:-true}
+
+  db:
+    image: postgres:12
+    environment:
+      <<: *db-env
+    ports:
+      - "5432:5432"
+
+  bot:
+    build: .
+    entrypoint:
+      - python
+    command:
+      - cli.py
+      - bots
+      - telegram
+    volumes:
+      - .:/app
+    environment:
+      <<: *queue-env
+    depends_on:
+      - redis
+
+  ingest-worker:
+    build: .
+    entrypoint:
+      - rq
+    command:
+      - worker
+      - ${INGEST_QUEUE:-ingest}
+    volumes:
+      - .:/app
+    environment:
+      <<: *queue-env
+    depends_on:
+      - redis
+
+  redis:
+      image: "redis:alpine"
+
+  tests:
+    build: .
+    entrypoint:
+      - scripts/docker/run-tests.sh
+    volumes:
+      - .:/app
+    environment:
+      <<: *db-env
+      DB_URL: postgresql://app:app@db/app-test
+    depends_on:
+      - migrations
