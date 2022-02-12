@@ -9,9 +9,9 @@ from app.document.schemas import DocumentCreate
 
 def create_document(db: Session, dc: DocumentCreate) -> Document:
     db_doc = Document(
-        text=dc.text,
+        text_filename=dc.text_filename,
         url=dc.url,
-        summary=f"{dc.text[:100]}...",
+        summary=dc.summary,
         updated_at=datetime.utcnow(),
     )
     db.add(db_doc)

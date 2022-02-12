@@ -9,6 +9,12 @@ x-queue-env: &queue-env
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   INGEST_QUEUE: ${INGEST_QUEUE:-ingest}
 
+x-s3-env: &s3-env
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minio}
+  S3_SECRET: ${S3_SECRET:-minio123}
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+  S3_REGION: ${S3_REGION:-us-east-2}
+
 services:
   migrations:
     build: .
@@ -71,11 +77,31 @@ services:
       - .:/app
     environment:
       <<: *queue-env
+      <<: *s3-env
     depends_on:
       - redis
 
   redis:
       image: "redis:alpine"
+
+
+  minio:
+    image: minio/minio
+    # uncomment this line for minio to write as 1000 uid
+    # user: 1000:1000
+    volumes:
+      - "./minio:/data"
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ACCESS_KEY: ${S3_ACCESS_KEY:-minio}
+      MINIO_SECRET_KEY: ${S3_SECRET:-minio123}
+    command: server /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
   tests:
     build: .
